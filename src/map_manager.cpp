@@ -9,21 +9,23 @@ static bool s_is_right_lane = false;
 
 void map_load_defaults(void) {
     // -------------------------------------------------------------
-    // CẤU HÌNH MẪU BAN ĐẦU CHO MAP 1 (Làn Trái)
+    // CẤU HÌNH MẪU BAN ĐẦU CHO MAP 1 (Sa bàn Goertek / Car Challenge 2026)
     // -------------------------------------------------------------
-    s_maps[0].count = 6;
-    // Đoạn 1: Xuất phát lướt qua bẫy vòng tròn
-    s_maps[0].wps[0] = { .end_ticks = 1500, .target_speed = 100, .action = ACTION_NORMAL };
-    // Đoạn 2: Leo lên góc vuông đỉnh Khu 1
-    s_maps[0].wps[1] = { .end_ticks = 2600, .target_speed = 85,  .action = ACTION_NORMAL };
-    // Đoạn 3: ÉP NHÁNH LƯỢN SÓNG BÊN TRÁI (bỏ Răng Cưa bên phải)
-    s_maps[0].wps[2] = { .end_ticks = 4800, .target_speed = 110, .action = ACTION_FORCE_LEFT };
+    s_maps[0].count = 7;
+    // Đoạn 0: Xuất phát qua DIODE êm ái, ép bám nhánh trên (Trái)
+    s_maps[0].wps[0] = { .end_ticks = 450,  .target_speed = 85,  .action = ACTION_FORCE_LEFT };
+    // Đoạn 1: Đường thẳng số 1 - Bung tốc độ lướt nhanh
+    s_maps[0].wps[1] = { .end_ticks = 1800, .target_speed = 125, .action = ACTION_NORMAL };
+    // Đoạn 2: Vào góc vuông đỉnh Khu 1
+    s_maps[0].wps[2] = { .end_ticks = 2600, .target_speed = 90,  .action = ACTION_NORMAL };
+    // Đoạn 3: ÉP NHÁNH LƯỢN SÓNG 3 MÚI TRÒN BÊN PHẢI (bỏ Răng Cưa bên trái)
+    s_maps[0].wps[3] = { .end_ticks = 4800, .target_speed = 115, .action = ACTION_FORCE_RIGHT };
     // Đoạn 4: Vượt đoạn vạch nét đứt (khóa lái phóng thẳng)
-    s_maps[0].wps[3] = { .end_ticks = 5500, .target_speed = 120, .action = ACTION_LOCK_STRAIGHT };
-    // Đoạn 5: Ôm cua U-turn dưới đáy
-    s_maps[0].wps[4] = { .end_ticks = 7000, .target_speed = 90,  .action = ACTION_NORMAL };
+    s_maps[0].wps[4] = { .end_ticks = 5500, .target_speed = 120, .action = ACTION_LOCK_STRAIGHT };
+    // Đoạn 5: Ôm cua U-turn lượn mượt
+    s_maps[0].wps[5] = { .end_ticks = 7000, .target_speed = 95,  .action = ACTION_NORMAL };
     // Đoạn 6: 2 Vạch ngang -> Phanh dừng tại rương kho báu
-    s_maps[0].wps[5] = { .end_ticks = 7800, .target_speed = 60,  .action = ACTION_BRAKE_STOP };
+    s_maps[0].wps[6] = { .end_ticks = 7800, .target_speed = 60,  .action = ACTION_BRAKE_STOP };
 
     // -------------------------------------------------------------
     // CẤU HÌNH MẪU BAN ĐẦU CHO MAP 2 (Làn Trái)

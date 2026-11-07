@@ -29,6 +29,10 @@ static volatile float s_current_mms_R = 0;
 static portMUX_TYPE s_encoder_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void init_single_pcnt_unit(int pinA, int pinB, pcnt_unit_t unit) {
+    // Kích hoạt điện trở kéo lên nội Pull-up cho cả 2 kênh Encoder để nhận xung sườn đanh rõ nét
+    pinMode(pinA, INPUT_PULLUP);
+    pinMode(pinB, INPUT_PULLUP);
+
     // Kênh 0: Cạnh xung chân A, mức điều khiển chân B
     pcnt_config_t pcnt_config_a = {
         .pulse_gpio_num = pinA,
@@ -44,14 +48,14 @@ static void init_single_pcnt_unit(int pinA, int pinB, pcnt_unit_t unit) {
     };
     pcnt_unit_config(&pcnt_config_a);
 
-    // Kênh 1: Cạnh xung chân B, mức điều khiển chân A
+    // Kênh 1: Cạnh xung chân B, mức điều khiển chân A (Cấu hình chuẩn Quadrature x4 giải mã 4 cạnh xung)
     pcnt_config_t pcnt_config_b = {
         .pulse_gpio_num = pinB,
         .ctrl_gpio_num = pinA,
         .lctrl_mode = PCNT_MODE_KEEP,
         .hctrl_mode = PCNT_MODE_REVERSE,
-        .pos_mode = PCNT_COUNT_INC,
-        .neg_mode = PCNT_COUNT_DEC,
+        .pos_mode = PCNT_COUNT_DEC, // Đồng pha đếm với kênh 0, không bị triệt tiêu xung lẫn nhau
+        .neg_mode = PCNT_COUNT_INC, // Đồng pha đếm với kênh 0
         .counter_h_lim = 32767,
         .counter_l_lim = -32768,
         .unit = unit,
