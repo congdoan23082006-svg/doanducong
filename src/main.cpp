@@ -257,8 +257,8 @@ void setup() {
     encoder_init();
     map_manager_init();
 
-    // 3. Khởi tạo bộ điều khiển PID chuẩn theo code mẫu (Kp=0.04, Ki=0.0, Kd=0.3, baseSpeed=100)
-    pid_init(0.04f, 0.0f, 0.3f, 100);
+    // 3. Khởi tạo bộ điều khiển PID chuẩn theo code mẫu (Kp=0.04, Ki=0.0, Kd=0.35, baseSpeed=125)
+    pid_init(0.04f, 0.0f, 0.35f, 125);
 
     // 4. Khởi tạo BLE Server với tên nhận diện
     ble_init("RACECAR_16SEN");

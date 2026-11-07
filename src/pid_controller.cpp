@@ -56,7 +56,7 @@ static PID_Config_t pidConfig = {
     .Kp = 0.04f,
     .Ki = 0.0f,
     .Kd = 0.35f,
-    .baseSpeed = 100,
+    .baseSpeed = 125,
     .maxSpeed = 220,
     .minSpeed = -120,
     .turnSpeed = 130
@@ -460,6 +460,19 @@ void pid_line_follow_step(void) {
 
     int L = base + adjust;
     int R = base - adjust;
+
+    // Thuật toán Bù lực đẩy bánh ngoài khi vào cung uốn lượn (High-Speed Curve Hugging)
+    // Khi sai số |error| > 1000 (đang vào cung uốn lượn), tự động bơm thêm lực đẩy bánh ngoài lên tới +25 PWM
+    // Giúp xe lướt tốc độ cao qua các đoạn uốn cong ngọt ngào như xe đua F1 có lực ép khí động học
+    int abs_err = abs(error);
+    if (abs_err > 1000) {
+        int curve_boost = (int)(((long)(abs_err - 1000) * 25) / 6500);
+        if (adjust > 0) {
+            L += curve_boost; // Cung uốn sang phải -> Bơm thêm lực bánh ngoài (Trái)
+        } else if (adjust < 0) {
+            R += curve_boost; // Cung uốn sang trái -> Bơm thêm lực bánh ngoài (Phải)
+        }
+    }
 
     move(L, R);
 }
