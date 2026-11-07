@@ -45,7 +45,7 @@ void sensor_mux_select(uint8_t channel) {
     digitalWrite(PIN_MUX_B, (channel & 0x02) ? HIGH : LOW);
     digitalWrite(PIN_MUX_C, (channel & 0x04) ? HIGH : LOW);
     digitalWrite(PIN_MUX_D, (channel & 0x08) ? HIGH : LOW);
-    delayMicroseconds(15); // Tối ưu siêu tốc 15µs (đủ chuẩn xả nạp CD74HC4067)
+    delayMicroseconds(8); // Tối ưu tần số siêu cao 8µs (tăng gấp đôi tốc độ quét 16 mắt)
 }
 
 uint16_t sensor_read_mux(uint8_t channel) {
@@ -58,8 +58,8 @@ static uint32_t s_last_read_us = 0;
 
 void sensor_read_all(void) {
     uint32_t now = (uint32_t)esp_timer_get_time();
-    // Chống đọc lặp thừa trong cùng 1 chu kỳ điều khiển (< 500µs)
-    if ((now - s_last_read_us) < 500 && !isCalibrating && calibrationReady) {
+    // Cho phép quét tần số cực cao (> 3500Hz), chỉ khóa nếu khoảng cách < 250µs
+    if ((now - s_last_read_us) < 250 && !isCalibrating && calibrationReady) {
         return;
     }
     s_last_read_us = now;
@@ -69,8 +69,8 @@ void sensor_read_all(void) {
         if (isCalibrating) {
             sensorRaw[i] = raw;
         } else {
-            // Bộ lọc số IIR siêu nhẹ (85% mới, 15% cũ) làm phẳng xung nhiễu đèn 100Hz và EMI motor
-            sensorRaw[i] = (uint16_t)(((uint32_t)raw * 85 + (uint32_t)sensorRaw[i] * 15) / 100);
+            // Bộ lọc IIR phản ứng cực nhạy (92% mới, 8% cũ), bắt vạch tức thời trong < 1ms
+            sensorRaw[i] = (uint16_t)(((uint32_t)raw * 92 + (uint32_t)sensorRaw[i] * 8) / 100);
         }
     }
 }

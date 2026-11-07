@@ -5,9 +5,9 @@
 #include <Arduino.h>
 
 // ================================================================
-// 5. PID & THAM SỐ (TỐI ƯU HÌNH HỌC CÁNH CUNG 16 MẮT)
+// PID & THAM SỐ (TỐI ƯU HÌNH HỌC CÁNH CUNG 16 MẮT)
 // ================================================================
-static float KP = 0.04f, KD = 0.3f;
+static float KP = 0.04f, KD = 0.35f;
 static unsigned long autoStartMs = 0;
 
 // Bảng tọa độ hình học 16 mắt cánh cong (Tâm Setpoint = 7500)
@@ -20,10 +20,8 @@ static const int SENSOR_POS[16] = {
     11200, 12500, 13800, 15000  // Cánh phải (mắt 12..15)
 };
 
-// Cua góc vuông: bánh ngoài = BASE + TURN_OUT, bánh trong = BASE - TURN_IN
-// Đã hiệu chuẩn: với BASE=100 -> Ngoài=180, Trong=-20 (đảo chiều nhẹ xoay compa quanh trục cực gọn)
+// Cua góc vuông: Bánh ngoài tiến (p_out), bánh trong lùi (p_in) tạo tâm xoay compa
 static int TURN_OUT = 80, TURN_IN = 120;
-static const int BOOST = 20, BOOST_THRESHOLD = 150;
 
 // Đoạn nét đứt (GAP) và vạch kết thúc (Full đen)
 #define GAP_STRAIGHT_MS 100
@@ -39,15 +37,28 @@ static int fullBlackFrames = 0;
 static unsigned long gapStart = 0;
 
 static int lastError = 0;
+static float s_filtered_dError = 0.0f;
 static int lastLinePos = 7500; // Tâm Setpoint của 16 mắt (0..15000)
+static unsigned long s_last_center_ms = 0;
+
+// ================================================================
+// STATE MACHINE CUA 90 ĐỘ (CHỐT XOAY COMPA KHÔNG VĂNG)
+// ================================================================
+// 0: Không cua (PID bình thường)
+// 1: Đang xoay góc vuông Trái 90°
+// 2: Đang xoay góc vuông Phải 90°
+static uint8_t s_corner_state = 0;
+static unsigned long s_corner_start_ms = 0;
+static unsigned long s_last_corner_end_ms = 0; // Chống kích hoạt đúp khi vừa thoát góc vuông
+static bool s_corner_cleared_old = false;
 
 static PID_Config_t pidConfig = {
     .Kp = 0.04f,
     .Ki = 0.0f,
-    .Kd = 0.3f,
+    .Kd = 0.35f,
     .baseSpeed = 100,
     .maxSpeed = 220,
-    .minSpeed = -115,
+    .minSpeed = -120,
     .turnSpeed = 130
 };
 
@@ -79,9 +90,15 @@ void pid_init(float kp, float ki, float kd, int16_t baseSpeed) {
     pidConfig.Kd = kd;
     pidConfig.baseSpeed = baseSpeed;
     lastError = 0;
+    s_filtered_dError = 0.0f;
     lastLinePos = 7500;
     autoMode = false;
     currentCase = LINE_CASE_STOPPED;
+    s_corner_state = 0;
+    s_corner_start_ms = 0;
+    s_last_corner_end_ms = 0;
+    s_corner_cleared_old = false;
+    s_last_center_ms = millis();
     cnt = 0;
     cntDen = 0;
     inGap = false;
@@ -137,16 +154,24 @@ void pid_set_auto_mode(bool enable) {
     autoMode = enable;
     if (!autoMode) {
         currentCase = LINE_CASE_STOPPED;
+        s_corner_state = 0;
+        s_corner_cleared_old = false;
         motor_stop();
     } else {
         autoStartMs = millis();
         lastError = 0;
+        s_filtered_dError = 0.0f;
         lastLinePos = 7500;
         cnt = 0;
         cntDen = 0;
         inGap = false;
         fullBlackFrames = 0;
         inFullBlack = false;
+        s_corner_state = 0;
+        s_corner_start_ms = 0;
+        s_last_corner_end_ms = 0;
+        s_corner_cleared_old = false;
+        s_last_center_ms = millis();
         currentCase = LINE_CASE_NORMAL_PID;
     }
 }
@@ -156,7 +181,7 @@ bool pid_is_auto_mode(void) {
 }
 
 /**
- * @brief Đọc vị trí tim vạch bằng thuật toán chuẩn của code mẫu
+ * @brief Đọc vị trí tim vạch bằng thuật toán chuẩn Smooth Centroid
  * 16 mắt: dải 0..15000, Setpoint = 7500
  */
 bool pid_calculate_position(float *outPosition, uint8_t *outBlackCount) {
@@ -204,13 +229,13 @@ bool pid_calculate_position(float *outPosition, uint8_t *outBlackCount) {
 
 LineCase_t pid_detect_case(float position, uint8_t blackCount) {
     if (!calibrationReady) return LINE_CASE_STOPPED;
+    if (s_corner_state == 2) return LINE_CASE_CORNER_RIGHT;
+    if (s_corner_state == 1) return LINE_CASE_CORNER_LEFT;
     uint16_t mask = sensor_get_line_bits();
     bool wings_both = ((mask & 0x000F) != 0) && ((mask & 0xF000) != 0);
     if (blackCount >= 9 || (wings_both && blackCount >= 6) || mask == 0xFFFF) return LINE_CASE_CROSS_LINE;
-    // Cua phải: Cụm cánh phải (12..15) đen, cụm cánh trái (0..2) trắng
-    if (s_sector_action != 1 && (mask & 0xF000) && !(mask & 0x0007) && blackCount <= 8) return LINE_CASE_CORNER_RIGHT;
-    // Cua trái: Cụm cánh trái (0..3) đen, cụm cánh phải (13..15) trắng
-    if (s_sector_action != 2 && (mask & 0x000F) && !(mask & 0xE000) && blackCount <= 8) return LINE_CASE_CORNER_LEFT;
+    if (s_sector_action != 1 && (mask & 0xE000) && !(mask & 0x0007) && blackCount <= 8) return LINE_CASE_CORNER_RIGHT;
+    if (s_sector_action != 2 && (mask & 0x0007) && !(mask & 0xE000) && blackCount <= 8) return LINE_CASE_CORNER_LEFT;
     if (blackCount == 0) return LINE_CASE_LOST_LINE;
     return LINE_CASE_NORMAL_PID;
 }
@@ -225,12 +250,14 @@ void pid_line_follow_step(void) {
     // Sa bàn: Ép chạy thẳng vượt vạch nét đứt
     if (s_sector_action == 3) {
         currentCase = LINE_CASE_DASHED_LINE;
+        s_corner_state = 0;
         move(base, base);
         return;
     }
     // Sa bàn: Phanh dừng chốt đích
     if (s_sector_action == 4) {
         currentCase = LINE_CASE_STOPPED;
+        s_corner_state = 0;
         motor_stop();
         return;
     }
@@ -240,10 +267,15 @@ void pid_line_follow_step(void) {
     pid_calculate_position(&position, &blackCount);
     uint16_t currentPattern = sensor_get_line_bits();
 
-    // 1. Vạch kết thúc / ngã tư lớn (Tối ưu cho cánh cong)
-    // Khi cán vạch ngang, cả 2 cánh chạm đen hoặc tổng số mắt đen >= 9
+    // Ghi nhận thời điểm mắt trung tâm (5..10) nhìn thấy line
+    if ((currentPattern & 0x07E0) != 0) {
+        s_last_center_ms = millis();
+    }
+
+    // 1. Vạch kết thúc / ngã tư lớn
+    // Chỉ kích hoạt khi CẢ 2 CÁNH ĐỀU ĐEN (vạch ngang trọn vẹn) hoặc gần như toàn bộ dàn mắt đen (>= 13 mắt)
     bool wings_both_black = ((currentPattern & 0x000F) != 0) && ((currentPattern & 0xF000) != 0);
-    if (blackCount >= 9 || (wings_both_black && blackCount >= 6) || currentPattern == 0xFFFF) {
+    if ((wings_both_black && blackCount >= 6) || blackCount >= 13 || currentPattern == 0xFFFF) {
         if (fullBlackFrames < END_CONFIRM)
             fullBlackFrames++;
         if (fullBlackFrames >= END_CONFIRM && !inFullBlack) {
@@ -251,6 +283,7 @@ void pid_line_follow_step(void) {
             cntDen++;
             if (cntDen >= END_BLACK_COUNT) {
                 currentCase = LINE_CASE_CROSS_LINE;
+                s_corner_state = 0;
                 motor_stop();
                 return;
             }
@@ -263,17 +296,122 @@ void pid_line_follow_step(void) {
     if (blackCount != 0)
         inGap = false;
 
-    // 2. Cua 90 độ (Tối ưu cho cánh cong: một cánh chạm đen, cánh đối diện hoàn toàn trắng)
-    // Cua phải 90°: Cánh phải (mắt 12..15) dính đen, cánh trái (mắt 0..2) trắng (Bỏ qua nếu đang Ép Trái)
-    if (s_sector_action != 1 && (currentPattern & 0xF000) && !(currentPattern & 0x0007) && blackCount <= 8) {
+    // 2. TÍNH TOÁN LỰC XOAY COMPA CUA 90 ĐỘ (CÂN BẰNG TIẾN - LÙI)
+    // Bánh ngoài tiến (p_out): xoay dứt khoát nhưng không phóng trớn quá đà (110 - 145)
+    // Bánh trong lùi (p_in): ghìm cứng làm tâm compa (-65 đến -105)
+    int p_out = constrain(base + (TURN_OUT / 2), 110, 145);
+    int p_in  = constrain(TURN_IN, 65, 105);
+
+    // 2A. NẾU ĐANG TRONG TRẠNG THÁI XOAY 90 ĐỘ (STATE MACHINE ACTIVE)
+    if (s_corner_state == 2) { // Đang xoay Phải 90°
         currentCase = LINE_CASE_CORNER_RIGHT;
-        move(base + TURN_OUT, base - TURN_IN);
+        move(p_out, -p_in); // Bánh trái tiến, bánh phải lùi ghìm tâm
+
+        unsigned long elapsed = millis() - s_corner_start_ms;
+        // Kiểm tra xem vạch cũ đã rời khỏi cụm mắt giữa chưa
+        if ((currentPattern & 0x03C0) == 0) {
+            s_corner_cleared_old = true;
+        }
+
+        // Thoát cua khi: Vạch cũ đã rời đi VÀ mắt giữa bắt được vạch mới (hoặc sau 40ms nếu xoay nhanh)
+        if ((s_corner_cleared_old || elapsed >= 40) && ((currentPattern & 0x03C0) != 0)) {
+            s_corner_state = 0;
+            s_corner_cleared_old = false;
+            s_last_corner_end_ms = millis();
+            lastError = 0;
+            s_filtered_dError = 0.0f;
+            return;
+        }
+
+        // Timeout bảo hiểm tối đa 350ms
+        if (elapsed > 350) {
+            s_corner_state = 0;
+            s_corner_cleared_old = false;
+            s_last_corner_end_ms = millis();
+            lastError = 0;
+            s_filtered_dError = 0.0f;
+            return;
+        }
         return;
     }
-    // Cua trái 90°: Cánh trái (mắt 0..3) dính đen, cánh phải (mắt 13..15) trắng (Bỏ qua nếu đang Ép Phải)
-    if (s_sector_action != 2 && (currentPattern & 0x000F) && !(currentPattern & 0xE000) && blackCount <= 8) {
+
+    if (s_corner_state == 1) { // Đang xoay Trái 90°
         currentCase = LINE_CASE_CORNER_LEFT;
-        move(base - TURN_IN, base + TURN_OUT);
+        move(-p_in, p_out); // Bánh trái lùi ghìm tâm, bánh phải tiến
+
+        unsigned long elapsed = millis() - s_corner_start_ms;
+        if ((currentPattern & 0x03C0) == 0) {
+            s_corner_cleared_old = true;
+        }
+
+        if ((s_corner_cleared_old || elapsed >= 40) && ((currentPattern & 0x03C0) != 0)) {
+            s_corner_state = 0;
+            s_corner_cleared_old = false;
+            s_last_corner_end_ms = millis();
+            lastError = 0;
+            s_filtered_dError = 0.0f;
+            return;
+        }
+
+        if (elapsed > 350) {
+            s_corner_state = 0;
+            s_corner_cleared_old = false;
+            s_last_corner_end_ms = millis();
+            lastError = 0;
+            s_filtered_dError = 0.0f;
+            return;
+        }
+        return;
+    }
+
+    // 2B. NHẬN DIỆN BẮT ĐẦU VÀO GÓC VUÔNG 90 ĐỘ / NGÃ 3 NHÁNH RẼ (MỞ RỘNG VÙNG MẮT QUÉT)
+    // Đếm số mắt đen ở 2 cánh để nhận diện sớm ngã 3 ngay từ mắt 10-12 (không cần chờ mắt rìa 15)
+    uint8_t right_branch_cnt = 0;
+    if (currentPattern & (1 << 10)) right_branch_cnt++;
+    if (currentPattern & (1 << 11)) right_branch_cnt++;
+    if (currentPattern & (1 << 12)) right_branch_cnt++;
+    if (currentPattern & (1 << 13)) right_branch_cnt++;
+    if (currentPattern & (1 << 14)) right_branch_cnt++;
+    if (currentPattern & (1 << 15)) right_branch_cnt++;
+
+    uint8_t left_branch_cnt = 0;
+    if (currentPattern & (1 << 0)) left_branch_cnt++;
+    if (currentPattern & (1 << 1)) left_branch_cnt++;
+    if (currentPattern & (1 << 2)) left_branch_cnt++;
+    if (currentPattern & (1 << 3)) left_branch_cnt++;
+    if (currentPattern & (1 << 4)) left_branch_cnt++;
+    if (currentPattern & (1 << 5)) left_branch_cnt++;
+
+    bool corner_cooldown_ok = (millis() - s_last_corner_end_ms > 70) || (s_sector_action == 1) || (s_sector_action == 2);
+    bool recently_centered = ((currentPattern & 0x07E0) != 0) || ((millis() - s_last_center_ms) < 70);
+
+    // Cua phải 90° / Ngã 3 rẽ phải:
+    // - Nhánh phải bắt được (từ 2 mắt đen ở cánh phải trở lên hoặc mắt 13..15 chạm đen)
+    // - Cánh trái (mắt 0..2) hoàn toàn TRẮNG (loại trừ ngã tư)
+    bool right_branch_detected = (right_branch_cnt >= 2) || ((currentPattern & 0xE000) != 0);
+    bool left_wing_clear = !(currentPattern & 0x0007);
+
+    if (s_sector_action != 1 && corner_cooldown_ok && right_branch_detected && left_wing_clear && blackCount <= 12 && recently_centered) {
+        s_corner_state = 2; // Khóa trạng thái cua Phải
+        s_corner_start_ms = millis();
+        s_corner_cleared_old = false;
+        currentCase = LINE_CASE_CORNER_RIGHT;
+        move(p_out, -p_in);
+        return;
+    }
+
+    // Cua trái 90° / Ngã 3 rẽ trái:
+    // - Nhánh trái bắt được (từ 2 mắt đen ở cánh trái trở lên hoặc mắt 0..2 chạm đen)
+    // - Cánh phải (mắt 13..15) hoàn toàn TRẮNG
+    bool left_branch_detected = (left_branch_cnt >= 2) || ((currentPattern & 0x0007) != 0);
+    bool right_wing_clear = !(currentPattern & 0xE000);
+
+    if (s_sector_action != 2 && corner_cooldown_ok && left_branch_detected && right_wing_clear && blackCount <= 12 && recently_centered) {
+        s_corner_state = 1; // Khóa trạng thái cua Trái
+        s_corner_start_ms = millis();
+        s_corner_cleared_old = false;
+        currentCase = LINE_CASE_CORNER_LEFT;
+        move(-p_in, p_out);
         return;
     }
 
@@ -291,28 +429,37 @@ void pid_line_follow_step(void) {
         }
         currentCase = LINE_CASE_LOST_LINE;
         if (lastError > 0)
-            move(base + BOOST, -base);
+            move(base + 20, -base);
         else
-            move(-base, base + BOOST);
+            move(-base, base + 20);
         return;
     }
 
-    // 4. PID bám line (công thức trực tiếp của code mẫu + Deadband nhỏ cho cánh cong)
+    // 4. PID BÁM LINE ĐẦM CHẮC (DEADBAND LIÊN TỤC + D-TERM FILTER)
     currentCase = LINE_CASE_NORMAL_PID;
-    int error = lastLinePos - 7500; // SETPOINT = 7500
-    if (abs(error) < 120) {
-        error = 0; // Deadband nhỏ triệt tiêu rung lắc ở đường thẳng
+    int raw_error = lastLinePos - 7500; // SETPOINT = 7500
+
+    // Vùng chết liên tục (Continuous Deadband 70): Triệt tiêu rung lắc ở đường thẳng
+    // nhưng KHÔNG BAO GIỜ bị giật bước đột ngột (Zero Derivative Kick)
+    int error = 0;
+    const int DEADBAND = 70;
+    if (raw_error > DEADBAND) {
+        error = raw_error - DEADBAND;
+    } else if (raw_error < -DEADBAND) {
+        error = raw_error + DEADBAND;
+    } else {
+        error = 0;
     }
 
-    int adjust = (int)(error * KP) + (int)(KD * (error - lastError));
-    lastError = (abs(error) < 120) ? 0 : error;
+    // Bộ lọc thông thấp cho thành phần vi phân D (70% cũ, 30% mới) để dập tắt nhiễu ADC 1000Hz
+    float raw_dError = (float)(error - lastError);
+    s_filtered_dError = s_filtered_dError * 0.7f + raw_dError * 0.3f;
+    lastError = error;
+
+    int adjust = (int)(error * KP + s_filtered_dError * KD);
 
     int L = base + adjust;
     int R = base - adjust;
-    if (adjust > BOOST_THRESHOLD)
-        L += BOOST;
-    if (adjust < -BOOST_THRESHOLD)
-        R += BOOST;
 
     move(L, R);
 }
