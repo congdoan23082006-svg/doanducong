@@ -14,14 +14,14 @@ void map_load_defaults(void) {
     s_maps[0].count = 7;
     // Đoạn 0: Xuất phát qua DIODE êm ái, ép bám nhánh trên (Trái)
     s_maps[0].wps[0] = { .end_ticks = 450,  .target_speed = 85,  .action = ACTION_FORCE_LEFT };
-    // Đoạn 1: Đường thẳng số 1 - Bung tốc độ lướt nhanh
-    s_maps[0].wps[1] = { .end_ticks = 1800, .target_speed = 125, .action = ACTION_NORMAL };
+    // Đoạn 1: Đường thẳng số 1 - Tốc độ chuẩn 100
+    s_maps[0].wps[1] = { .end_ticks = 1800, .target_speed = 100, .action = ACTION_NORMAL };
     // Đoạn 2: Vào góc vuông đỉnh Khu 1
     s_maps[0].wps[2] = { .end_ticks = 2600, .target_speed = 90,  .action = ACTION_NORMAL };
     // Đoạn 3: ÉP NHÁNH LƯỢN SÓNG 3 MÚI TRÒN BÊN PHẢI (bỏ Răng Cưa bên trái)
-    s_maps[0].wps[3] = { .end_ticks = 4800, .target_speed = 115, .action = ACTION_FORCE_RIGHT };
+    s_maps[0].wps[3] = { .end_ticks = 4800, .target_speed = 100, .action = ACTION_FORCE_RIGHT };
     // Đoạn 4: Vượt đoạn vạch nét đứt (khóa lái phóng thẳng)
-    s_maps[0].wps[4] = { .end_ticks = 5500, .target_speed = 120, .action = ACTION_LOCK_STRAIGHT };
+    s_maps[0].wps[4] = { .end_ticks = 5500, .target_speed = 100, .action = ACTION_LOCK_STRAIGHT };
     // Đoạn 5: Ôm cua U-turn lượn mượt
     s_maps[0].wps[5] = { .end_ticks = 7000, .target_speed = 95,  .action = ACTION_NORMAL };
     // Đoạn 6: 2 Vạch ngang -> Phanh dừng tại rương kho báu
@@ -33,9 +33,8 @@ void map_load_defaults(void) {
     s_maps[1].count = 6;
     s_maps[1].wps[0] = { .end_ticks = 1400, .target_speed = 100, .action = ACTION_NORMAL };
     s_maps[1].wps[1] = { .end_ticks = 2500, .target_speed = 85,  .action = ACTION_NORMAL };
-    // Map 2: Nhánh Lượn Sóng nằm ở NGOÀI (Trái) -> ÉP NHÁNH NGOÀI
-    s_maps[1].wps[2] = { .end_ticks = 4800, .target_speed = 110, .action = ACTION_FORCE_LEFT };
-    s_maps[1].wps[3] = { .end_ticks = 5500, .target_speed = 120, .action = ACTION_LOCK_STRAIGHT };
+    s_maps[1].wps[2] = { .end_ticks = 4800, .target_speed = 100, .action = ACTION_FORCE_LEFT };
+    s_maps[1].wps[3] = { .end_ticks = 5500, .target_speed = 100, .action = ACTION_LOCK_STRAIGHT };
     s_maps[1].wps[4] = { .end_ticks = 7000, .target_speed = 90,  .action = ACTION_NORMAL };
     s_maps[1].wps[5] = { .end_ticks = 7800, .target_speed = 60,  .action = ACTION_BRAKE_STOP };
 
@@ -43,12 +42,10 @@ void map_load_defaults(void) {
     // CẤU HÌNH MẪU BAN ĐẦU CHO MAP 3 (Làn Trái)
     // -------------------------------------------------------------
     s_maps[2].count = 6;
-    // Map 3: Xuất phát qua 2 hình thoi kép
     s_maps[2].wps[0] = { .end_ticks = 1600, .target_speed = 95,  .action = ACTION_FORCE_RIGHT };
     s_maps[2].wps[1] = { .end_ticks = 2700, .target_speed = 85,  .action = ACTION_NORMAL };
-    // Map 3: Nhánh Lượn Sóng nằm ở NGOÀI (Trái)
-    s_maps[2].wps[2] = { .end_ticks = 4900, .target_speed = 110, .action = ACTION_FORCE_LEFT };
-    s_maps[2].wps[3] = { .end_ticks = 5600, .target_speed = 120, .action = ACTION_LOCK_STRAIGHT };
+    s_maps[2].wps[2] = { .end_ticks = 4900, .target_speed = 100, .action = ACTION_FORCE_LEFT };
+    s_maps[2].wps[3] = { .end_ticks = 5600, .target_speed = 100, .action = ACTION_LOCK_STRAIGHT };
     s_maps[2].wps[4] = { .end_ticks = 7100, .target_speed = 90,  .action = ACTION_NORMAL };
     s_maps[2].wps[5] = { .end_ticks = 7900, .target_speed = 60,  .action = ACTION_BRAKE_STOP };
 }
