@@ -61,4 +61,11 @@
 #define PIN_MUX_S2             19     // Chân chọn kênh S2
 #define PIN_MUX_S3             23     // Chân chọn kênh S3
 
+// ================================================================
+// 6. CẤU HÌNH CHẾ ĐỘ BLUETOOTH (CHẾ ĐỘ KÉP - DUAL PROFILE)
+// ================================================================
+// 0: Chế độ BLE (Dùng giao diện Web Bluetooth Dashboard trên Chrome/Android/PC)
+// 1: Chế độ Bluetooth Classic SPP (Đọc Log chuyển động tốc độ cao qua Serial Bluetooth Terminal / COM ảo)
+#define USE_BLUETOOTH_CLASSIC  1
+
 #endif // CONFIG_H

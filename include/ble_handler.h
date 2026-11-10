@@ -38,6 +38,9 @@ void ble_send_telemetry(int32_t ticks_l, int32_t ticks_r, float line_pos,
 void ble_send_string(const char *str);
 void ble_send_map_data(uint8_t map_idx);
 
+// Xử lý vòng lặp truyền thông (nhận lệnh từ Bluetooth Classic SPP hoặc BLE)
+void ble_update_loop(void);
+
 #ifdef __cplusplus
 }
 #endif

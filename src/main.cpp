@@ -212,37 +212,21 @@ void controlTask(void *pvParameters) {
             motor_stop();
         }
 
-        vTaskDelayUntil(&xLastWakeTime, xFrequency);
-    }
-}
 
-// ================================================================
-// CORE 0: TASK BLE & TRUYỀN THÔNG WEB (Chạy ngầm ở Core 0)
-// ================================================================
-void bleTask(void *pvParameters) {
-    static uint32_t s_last_wait_log = 0;
-    for (;;) {
-        // Bắn dữ liệu Telemetry về Web mỗi 150ms (chuẩn nhịp mượt theo bản tham khảo)
-        if (ble_is_connected()) {
-            int32_t tl = (int32_t)encoder_get_ticks_L();
-            int32_t tr = (int32_t)encoder_get_ticks_R();
-            float pos = s_live_line_pos; // TRUYỀN TỌA ĐỘ REAL-TIME ĐỘNG (KỂ CẢ KHI DỪNG XE)
-            int16_t ml = motor_get_left_speed();
-            int16_t mr = motor_get_right_speed();
-            uint8_t m_idx = map_get_selected();
-            uint8_t state = (uint8_t)car_get_run_mode();
-            uint16_t mask = sensor_get_line_bits();
-
-            // Gói duy nhất: Tọa độ, Xung, PWM và Mask 16 mắt (T:)
-            ble_send_telemetry(tl, tr, pos, ml, mr, m_idx, s_active_wp_idx, state, mask);
-        } else {
-            if (millis() - s_last_wait_log > 2000) {
-                s_last_wait_log = millis();
+        
+#if USE_BLUETOOTH_CLASSIC
+                Serial.println(">> ⏳ [BT CLASSIC SPP] Đang chờ kết nối... (Tên BT: RACECAR_16SEN)");
+#else
                 Serial.println(">> ⏳ [BLE] Đang chờ Web kết nối... (Tên BLE: RACECAR_16SEN)");
+#endif
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(150)); // 150ms/lần (~7Hz) cực kỳ thông thoáng và không nghẽn BLE
+#if USE_BLUETOOTH_CLASSIC
+        vTaskDelay(pdMS_TO_TICKS(40)); // Bluetooth Classic: 40ms/lần (25Hz) bắn log chuyển động cực mượt!
+#else
+        vTaskDelay(pdMS_TO_TICKS(150)); // BLE: 150ms/lần (~7Hz)
+#endif
     }
 }
 
@@ -291,7 +275,7 @@ void setup() {
     xTaskCreatePinnedToCore(
         bleTask,
         "BleTask",
-        4096,
+        6144, // 6KB stack an toàn tuyệt đối cho Bluetooth Stack
         NULL,
         2,
         &s_ble_task_handle,
