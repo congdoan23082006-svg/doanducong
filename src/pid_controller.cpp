@@ -24,8 +24,8 @@ static const int SENSOR_POS[16] = {
     11200, 12500, 13800, 15000  // Cánh phải (mắt 12..15)
 };
 
-// Cua góc vuông: Bánh ngoài tiến (p_out), bánh trong lùi (p_in) tạo tâm xoay compa
-static int TURN_OUT = 80, TURN_IN = 120;
+// Cua góc vuông: Bánh ngoài tiến (p_out = 90), bánh trong lùi (p_in = 70) tạo tâm xoay compa cực êm
+static int TURN_OUT = 90, TURN_IN = 70;
 
 // Đoạn nét đứt (GAP) và vạch kết thúc (Full đen)
 #define GAP_STRAIGHT_MS 100
@@ -63,7 +63,7 @@ static PID_Config_t pidConfig = {
     .baseSpeed = 100,
     .maxSpeed = 220,
     .minSpeed = -120,
-    .turnSpeed = 130
+    .turnSpeed = 90
 };
 
 static bool autoMode = false;
@@ -123,9 +123,9 @@ void pid_set_base_speed(int16_t speed) {
 }
 
 void pid_set_turn_speed(int16_t speed) {
-    pidConfig.turnSpeed = clamp_int16(speed, 60, 220);
-    TURN_OUT = (int)(pidConfig.turnSpeed * 80 / 130);
-    TURN_IN  = (int)(pidConfig.turnSpeed * 120 / 130);
+    pidConfig.turnSpeed = clamp_int16(speed, 50, 220);
+    TURN_OUT = clamp_int16(speed, 50, 220);
+    TURN_IN  = (int)(TURN_OUT * 70 / 90);
 }
 
 int16_t pid_get_turn_speed(void) {
@@ -300,11 +300,11 @@ void pid_line_follow_step(void) {
     if (blackCount != 0)
         inGap = false;
 
-    // 2. TÍNH TOÁN LỰC XOAY COMPA CUA 90 ĐỘ (CÂN BẰNG TIẾN - LÙI)
-    // Bánh ngoài tiến (p_out): xoay dứt khoát nhưng không phóng trớn quá đà (110 - 145)
-    // Bánh trong lùi (p_in): ghìm cứng làm tâm compa (-65 đến -105)
-    int p_out = constrain(base + (TURN_OUT / 2), 110, 145);
-    int p_in  = constrain(TURN_IN, 65, 105);
+    // 2. TÍNH TOÁN LỰC XOAY COMPA CUA 90 ĐỘ (BÁNH NGOÀI 90, BÁNH TRONG 70)
+    // Bánh ngoài tiến (p_out = 90): xoay êm ái, bám sát vạch, không bị văng trớn
+    // Bánh trong lùi (p_in = 70): ghìm cứng làm tâm compa chuẩn xác
+    int p_out = constrain(TURN_OUT, 60, 130);
+    int p_in  = constrain(TURN_IN, 40, 110);
 
     // 2A. NẾU ĐANG TRONG TRẠNG THÁI XOAY 90 ĐỘ (STATE MACHINE ACTIVE)
     if (s_corner_state == 2) { // Đang xoay Phải 90°

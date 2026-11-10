@@ -212,8 +212,34 @@ void controlTask(void *pvParameters) {
             motor_stop();
         }
 
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
 
-        
+// ================================================================
+// CORE 0: TASK BLUETOOTH & BẮN LOG CHUYỂN ĐỘNG (Chạy ngầm ở Core 0)
+// ================================================================
+void bleTask(void *pvParameters) {
+    static uint32_t s_last_wait_log = 0;
+    for (;;) {
+        // Luôn xử lý đọc lệnh đến từ Bluetooth (đặc biệt cho Bluetooth Classic SPP)
+        ble_update_loop();
+
+        if (ble_is_connected()) {
+            int32_t tl = (int32_t)encoder_get_ticks_L();
+            int32_t tr = (int32_t)encoder_get_ticks_R();
+            float pos = s_live_line_pos; // TRUYỀN TỌA ĐỘ REAL-TIME ĐỘNG (KỂ CẢ KHI DỪNG XE)
+            int16_t ml = motor_get_left_speed();
+            int16_t mr = motor_get_right_speed();
+            uint8_t m_idx = map_get_selected();
+            uint8_t state = (uint8_t)car_get_run_mode();
+            uint16_t mask = sensor_get_line_bits();
+
+            // Gói dữ liệu Telemetry / Log chuyển động
+            ble_send_telemetry(tl, tr, pos, ml, mr, m_idx, s_active_wp_idx, state, mask);
+        } else {
+            if (millis() - s_last_wait_log > 2000) {
+                s_last_wait_log = millis();
 #if USE_BLUETOOTH_CLASSIC
                 Serial.println(">> ⏳ [BT CLASSIC SPP] Đang chờ kết nối... (Tên BT: RACECAR_16SEN)");
 #else
