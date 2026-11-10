@@ -125,14 +125,6 @@ void controlTask(void *pvParameters) {
             float dist_avg_mm = encoder_get_dist_avg_mm();
             uint8_t total_black = sensor_get_black_count();
 
-            // Nhận diện vạch đích an toàn 3 lớp (Tối ưu cho dàn cảm biến cánh cong):
-            // 1. Phải chạy tối thiểu 50cm (500mm / ~515 xung) rời vạch xuất phát
-            // 2. Cả 2 cánh ngoài cùng bên Trái (mắt 0..3) và bên Phải (mắt 12..15) đều chạm đen, hoặc tổng số mắt đen >= 9
-            bool dist_ok = (dist_avg_mm >= 500.0f || avg_ticks >= 515);
-            bool wing_left = (sensor_is_black(0) || sensor_is_black(1) || sensor_is_black(2) || sensor_is_black(3));
-            bool wing_right = (sensor_is_black(12) || sensor_is_black(13) || sensor_is_black(14) || sensor_is_black(15));
-            bool is_crossline_candidate = dist_ok && (total_black >= 9 || (total_black >= 6 && wing_left && wing_right));
-
             int16_t tgt_spd = 100;
             uint8_t act = 0;
             uint8_t wp_idx = 0;
@@ -142,56 +134,14 @@ void controlTask(void *pvParameters) {
                 tgt_spd = car_get_scan_speed();
                 act = ACTION_NORMAL;
                 wp_idx = 0;
-
-                // Lọc Debounce vạch đích 6 chu kỳ liên tiếp (6ms ở 1000Hz) chống nhiễu quang và ngã 3 đi chéo
-                if (is_crossline_candidate) {
-                    s_finish_debounce++;
-                } else {
-                    s_finish_debounce = 0;
-                }
-
-                if (s_finish_debounce >= 6) {
-                    s_finish_debounce = 0;
-                    float elapsed = (float)(esp_timer_get_time() - s_race_start_us) / 1000000.0f;
-                    char lapMsg[48];
-                    snprintf(lapMsg, sizeof(lapMsg), "LOG:RACE_FINISH:%.3f", elapsed);
-                    ble_send_string(lapMsg);
-
-                    motor_stop();
-                    car_set_run_mode(CAR_MODE_STOP);
-                    s_was_running = false;
-                    ble_send_string("ACK:SCAN_FINISHED");
-                    Serial.printf(">> 🏁 [VẠCH ĐÍCH] Quét map hoàn tất tại %.1f mm (%u xung, %.3fs)\n", dist_avg_mm, avg_ticks, elapsed);
-                    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-                    continue;
-                }
+                // ĐÃ BỎ CƠ CHẾ TỰ DỪNG THEO YÊU CẦU: Xe chạy liên tục, chỉ dừng khi bấm nút PHANH / STOP
             } else {
                 // LƯỢT 2: Chạy đua bung tốc độ theo bảng Waypoint sa bàn
                 map_get_current_action(avg_ticks, &tgt_spd, &act, &wp_idx);
 
-                bool is_race_finish_candidate = (act == ACTION_BRAKE_STOP) || 
-                    (is_crossline_candidate && (wp_idx >= map_get_waypoint_count(map_get_selected()) - 1));
-
-                if (is_race_finish_candidate) {
-                    s_finish_debounce++;
-                } else {
-                    s_finish_debounce = 0;
-                }
-
-                if (s_finish_debounce >= 6) {
-                    s_finish_debounce = 0;
-                    float elapsed = (float)(esp_timer_get_time() - s_race_start_us) / 1000000.0f;
-                    char lapMsg[48];
-                    snprintf(lapMsg, sizeof(lapMsg), "LOG:RACE_FINISH:%.3f", elapsed);
-                    ble_send_string(lapMsg);
-
-                    motor_stop();
-                    car_set_run_mode(CAR_MODE_STOP);
-                    s_was_running = false;
-                    ble_send_string("ACK:FINISH_STOPPED");
-                    Serial.printf(">> 🏁 [VẠCH ĐÍCH] Phanh dừng tại mốc %u (%.1f mm, %u xung, %.3fs)\n", wp_idx, dist_avg_mm, avg_ticks, elapsed);
-                    vTaskDelayUntil(&xLastWakeTime, xFrequency);
-                    continue;
+                // ĐÃ BỎ CƠ CHẾ TỰ DỪNG THEO YÊU CẦU: Nếu gặp mốc phanh đích thì chuyển thành chạy bám line bình thường
+                if (act == ACTION_BRAKE_STOP) {
+                    act = ACTION_NORMAL;
                 }
             }
 

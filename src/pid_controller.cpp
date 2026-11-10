@@ -259,11 +259,9 @@ void pid_line_follow_step(void) {
         return;
     }
     // Sa bàn: Phanh dừng chốt đích
+    // (ĐÃ BỎ CƠ CHẾ TỰ DỪNG THEO YÊU CẦU: Xe tiếp tục bám line bình thường)
     if (s_sector_action == 4) {
-        currentCase = LINE_CASE_STOPPED;
-        s_corner_state = 0;
-        motor_stop();
-        return;
+        s_sector_action = 0; // Chuyển về PID thường, không dừng xe
     }
 
     float position = 0.0f;
@@ -357,8 +355,15 @@ void pid_line_follow_step(void) {
         return;
     }
 
-    // 2B. NHẬN DIỆN BẮT ĐẦU VÀO GÓC VUÔNG 90 ĐỘ / NGÃ 3 NHÁNH RẼ (MỞ RỘNG VÙNG MẮT QUÉT)
-    // Đếm số mắt đen ở 2 cánh để nhận diện sớm ngã 3 ngay từ mắt 10-12 (không cần chờ mắt rìa 15)
+    // 2B. NHẬN DIỆN BẮT ĐẦU VÀO GÓC VUÔNG 90 ĐỘ / NGÃ 3 NHÁNH RẼ
+    // Để KHÔNG BỊ KÍCH HOẠT NHẦM trên đường ziczac / đường cong uốn lượn:
+    // - Trên đường ziczac: Vạch đen chỉ trượt dần từ giữa sang mép (blackCount thường <= 3).
+    //   Trường hợp này 100% để bộ PID mượt mà xử lý, TUYỆT ĐỐI KHÔNG kích hoạt State Machine Cua.
+    // - Chỉ kích hoạt State Machine Cua vuông 90° khi:
+    //   + Có lệnh ép rẽ từ sa bàn (s_sector_action == 1 hoặc 2)
+    //   + HOẶC có góc vuông / ngã rẽ thật sự: Mắt giữa vẫn có vạch ((currentPattern & 0x07E0) != 0)
+    //     ĐỒNG THỜI cánh ngoài xuất hiện nhánh rẽ và tổng số mắt đen blackCount >= 4.
+    //   + HOẶC góc vuông chữ L: Cụm 3 mắt ngoài cùng đều đen và blackCount >= 4.
     uint8_t right_branch_cnt = 0;
     if (currentPattern & (1 << 10)) right_branch_cnt++;
     if (currentPattern & (1 << 11)) right_branch_cnt++;
@@ -375,13 +380,15 @@ void pid_line_follow_step(void) {
     if (currentPattern & (1 << 4)) left_branch_cnt++;
     if (currentPattern & (1 << 5)) left_branch_cnt++;
 
+    bool center_has_line = (currentPattern & 0x07E0) != 0;
     bool corner_cooldown_ok = (millis() - s_last_corner_end_ms > 70) || (s_sector_action == 1) || (s_sector_action == 2);
-    bool recently_centered = ((currentPattern & 0x07E0) != 0) || ((millis() - s_last_center_ms) < 70);
+    bool recently_centered = center_has_line || ((millis() - s_last_center_ms) < 70);
 
     // Cua phải 90° / Ngã 3 rẽ phải:
-    // - Nhánh phải bắt được (từ 2 mắt đen ở cánh phải trở lên hoặc mắt 13..15 chạm đen)
-    // - Cánh trái (mắt 0..2) hoàn toàn TRẮNG (loại trừ ngã tư)
-    bool right_branch_detected = (right_branch_cnt >= 2) || ((currentPattern & 0xE000) != 0);
+    bool is_explicit_turn_right = (s_sector_action == 2) && ((currentPattern & 0xFC00) != 0);
+    bool is_t_junction_right   = center_has_line && ((currentPattern & 0xE000) != 0) && (blackCount >= 4);
+    bool is_l_corner_right     = (right_branch_cnt >= 3) && ((currentPattern & 0xE000) == 0xE000) && (blackCount >= 4);
+    bool right_branch_detected = is_explicit_turn_right || is_t_junction_right || is_l_corner_right;
     bool left_wing_clear = !(currentPattern & 0x0007);
 
     if (s_sector_action != 1 && corner_cooldown_ok && right_branch_detected && left_wing_clear && blackCount <= 12 && recently_centered) {
@@ -394,9 +401,10 @@ void pid_line_follow_step(void) {
     }
 
     // Cua trái 90° / Ngã 3 rẽ trái:
-    // - Nhánh trái bắt được (từ 2 mắt đen ở cánh trái trở lên hoặc mắt 0..2 chạm đen)
-    // - Cánh phải (mắt 13..15) hoàn toàn TRẮNG
-    bool left_branch_detected = (left_branch_cnt >= 2) || ((currentPattern & 0x0007) != 0);
+    bool is_explicit_turn_left = (s_sector_action == 1) && ((currentPattern & 0x003F) != 0);
+    bool is_t_junction_left   = center_has_line && ((currentPattern & 0x0007) != 0) && (blackCount >= 4);
+    bool is_l_corner_left     = (left_branch_cnt >= 3) && ((currentPattern & 0x0007) == 0x0007) && (blackCount >= 4);
+    bool left_branch_detected = is_explicit_turn_left || is_t_junction_left || is_l_corner_left;
     bool right_wing_clear = !(currentPattern & 0xE000);
 
     if (s_sector_action != 2 && corner_cooldown_ok && left_branch_detected && right_wing_clear && blackCount <= 12 && recently_centered) {
@@ -454,11 +462,14 @@ void pid_line_follow_step(void) {
     int L = base + adjust;
     int R = base - adjust;
 
-    // Trong chế độ PID bám line thường: Bánh trong chỉ giảm tốc, KHÔNG đảo chiều quay lùi
-    // Giúp xe lướt êm ái, bám đường đầm chắc, triệt tiêu 100% hiện tượng rung giật / quẫy đuôi cá
-    // (Đảo chiều lùi chỉ dành riêng cho trường hợp Cua vuông 90° State Machine: -p_in)
-    if (L < 0) L = 0;
-    if (R < 0) R = 0;
+    // Giữ đà trớn mượt mà cho bánh trong (Smooth Minimum Throttle):
+    // Thay vì để bánh trong tụt về 0 làm khựng xe mất đà,
+    // ta giữ xung tối thiểu MIN_SMOOTH_SPEED (35 PWM).
+    // Bánh trong không bao giờ bị dừng hay giật lùi,
+    // xe giữ nguyên quán tính lướt qua đường ziczac êm ru, liền mạch 100%!
+    const int MIN_SMOOTH_SPEED = 35;
+    if (L < MIN_SMOOTH_SPEED) L = MIN_SMOOTH_SPEED;
+    if (R < MIN_SMOOTH_SPEED) R = MIN_SMOOTH_SPEED;
     if (L > 220) L = 220;
     if (R > 220) R = 220;
 
