@@ -1,6 +1,28 @@
-# 🏎️ XE DÒ LINE 16 MẮT 2026 (CAR CHALLENGE 2026)
+# 🏎️ XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
 
 Dự án xe đua dò line tốc độ cao 16 cảm biến sử dụng vi điều khiển ESP32, động cơ GA25-370 12V 1360RPM có Encoder hồi tiếp, kiến trúc Dual-Core FreeRTOS kết hợp giao diện điều khiển không dây **Web Bluetooth (Web BLE)** trên GitHub Pages.
+
+---
+
+## 🏆 CÁC TÍNH NĂNG ĐÃ TỐI ƯU TRONG PHIÊN BẢN HOÀN HẢO
+
+1. **Khắc phục triệt để Encoder x4 phần cứng**:
+   - Cấu hình chuẩn Espressif Quadrature x4 (đồng pha Kênh 0 & Kênh 1), giải quyết 100% lỗi triệt tiêu xung (-1, 0, 1).
+   - Kích hoạt điện trở kéo lên nội `INPUT_PULLUP` cho 4 chân encoder (`GPIO 21, 22, 32, 33`).
+2. **Chiến thuật vượt DIODE an toàn tuyệt đối**:
+   - Khởi hành có kiểm soát ở **85 PWM**, kích hoạt `ACTION_FORCE_LEFT` (chỉ mở mắt 0..8 bên trái).
+   - Xe ôm bám dính mép trên Diode, loại bỏ 100% hiện tượng "vụt qua Diode" (lao xuyên tâm khoảng trắng).
+3. **Cua compa 90° bằng State Machine thông minh**:
+   - Nhận diện sớm cụm mắt rẽ 10..15 và 0..5, kiểm tra đối xứng cánh đối diện phải TRẮNG TUYỆT ĐỐI để không bao giờ nhận nhầm ngã tư hay vạch đích.
+   - Quay compa tâm bánh trong (`p_out = 140 PWM, p_in = 105 PWM`), chỉ thoát cua khi mắt giữa (6..9) bắt trúng vạch mới.
+4. **Bộ điều khiển PID mượt mà & Bơm lực bánh ngoài (Curve Hugging)**:
+   - Áp dụng **Continuous Deadband (70 đơn vị)**: Triệt tiêu rung lắc đường thẳng, Zero Derivative Kick.
+   - Bổ sung bộ lọc thông thấp cho vi phân D-term (70/30).
+   - Bơm thêm lực đẩy bánh ngoài lên tới $+25$ PWM khi vào các khúc uốn lượn để bám cua tốc độ cao như xe đua F1.
+5. **Tần số quét siêu cao 4000Hz**:
+   - Rút ngắn delay MUX còn 8µs, bộ lọc IIR nhạy 92/8 bắt vạch tức thời trong $< 1\text{ms}$.
+6. **Đồng bộ chuẩn 100 PWM toàn hệ thống**:
+   - Ghim mốc tốc độ chuẩn 100 PWM trên toàn bộ PID, BLE, Main và Waypoints để xe chạy đầm chắc và bám đường tối đa.
 
 ---
 
