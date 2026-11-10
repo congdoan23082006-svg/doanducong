@@ -66,6 +66,6 @@
 // ================================================================
 // 0: Chế độ BLE (Dùng giao diện Web Bluetooth Dashboard trên Chrome/Android/PC)
 // 1: Chế độ Bluetooth Classic SPP (Đọc Log chuyển động tốc độ cao qua Serial Bluetooth Terminal / COM ảo)
-#define USE_BLUETOOTH_CLASSIC  1
+#define USE_BLUETOOTH_CLASSIC  0
 
 #endif // CONFIG_H
