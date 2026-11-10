@@ -49,9 +49,11 @@ static void handle_command(String rxValue) {
 
     // 1. Lệnh điều khiển chạy
     if (rxValue == "CMD:SCAN") {
+        encoder_reset(); // Tự động reset xung về 0 khi bắt đầu quét
         car_set_run_mode(CAR_MODE_SCAN);
         ble_send_string("ACK:SCAN_MODE_STARTED");
     } else if (rxValue == "CMD:RACE" || rxValue == "CMD:START" || rxValue == "AUTO" || rxValue == "RUN") {
+        encoder_reset(); // Tự động reset xung về 0 khi bắt đầu chạy đua Lượt 2
         car_set_run_mode(CAR_MODE_RACE);
         ble_send_string("ACK:RACE_MODE_STARTED");
     } else if (rxValue == "CMD:STOP" || rxValue == "MANUAL" || rxValue == "STOP") {

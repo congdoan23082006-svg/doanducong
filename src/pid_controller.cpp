@@ -11,7 +11,7 @@
 // ================================================================
 // PID & THAM SỐ (TỐI ƯU HÌNH HỌC CÁNH CUNG 16 MẮT)
 // ================================================================
-static float KP = 0.04f, KD = 0.35f;
+static float KP = 0.06f, KD = 1.00f;
 static unsigned long autoStartMs = 0;
 
 // Bảng tọa độ hình học 16 mắt cánh cong (Tâm Setpoint = 7500)
@@ -24,8 +24,8 @@ static const int SENSOR_POS[16] = {
     11200, 12500, 13800, 15000  // Cánh phải (mắt 12..15)
 };
 
-// Cua góc vuông: Bánh ngoài tiến (p_out = 90), bánh trong lùi (p_in = 70) tạo tâm xoay compa cực êm
-static int TURN_OUT = 90, TURN_IN = 70;
+// Cua góc vuông: Bánh ngoài tiến (p_out = 115), bánh trong lùi (p_in = 75) tạo tâm xoay compa cực nhanh và dứt khoát
+static int TURN_OUT = 115, TURN_IN = 75;
 
 // Đoạn nét đứt (GAP) và vạch kết thúc (Full đen)
 #define GAP_STRAIGHT_MS 100
@@ -57,13 +57,13 @@ static unsigned long s_last_corner_end_ms = 0; // Chống kích hoạt đúp khi
 static bool s_corner_cleared_old = false;
 
 static PID_Config_t pidConfig = {
-    .Kp = 0.04f,
+    .Kp = 0.06f,
     .Ki = 0.0f,
-    .Kd = 0.35f,
-    .baseSpeed = 100,
+    .Kd = 1.00f,
+    .baseSpeed = 120,
     .maxSpeed = 220,
     .minSpeed = -120,
-    .turnSpeed = 90
+    .turnSpeed = 115
 };
 
 static bool autoMode = false;
@@ -125,7 +125,7 @@ void pid_set_base_speed(int16_t speed) {
 void pid_set_turn_speed(int16_t speed) {
     pidConfig.turnSpeed = clamp_int16(speed, 50, 220);
     TURN_OUT = clamp_int16(speed, 50, 220);
-    TURN_IN  = (int)(TURN_OUT * 70 / 90);
+    TURN_IN  = (int)(TURN_OUT * 75 / 115);
 }
 
 int16_t pid_get_turn_speed(void) {
@@ -237,9 +237,9 @@ LineCase_t pid_detect_case(float position, uint8_t blackCount) {
     if (s_corner_state == 1) return LINE_CASE_CORNER_LEFT;
     uint16_t mask = sensor_get_line_bits();
     bool wings_both = ((mask & 0x000F) != 0) && ((mask & 0xF000) != 0);
-    if (blackCount >= 9 || (wings_both && blackCount >= 6) || mask == 0xFFFF) return LINE_CASE_CROSS_LINE;
-    if (s_sector_action != 1 && (mask & 0xE000) && !(mask & 0x0007) && blackCount <= 8) return LINE_CASE_CORNER_RIGHT;
-    if (s_sector_action != 2 && (mask & 0x0007) && !(mask & 0xE000) && blackCount <= 8) return LINE_CASE_CORNER_LEFT;
+    if ((wings_both && blackCount >= 6) || blackCount >= 13 || mask == 0xFFFF) return LINE_CASE_CROSS_LINE;
+    if (s_sector_action != 1 && (mask & 0xF000) && !(mask & 0x0007) && blackCount <= 12) return LINE_CASE_CORNER_RIGHT;
+    if (s_sector_action != 2 && (mask & 0x000F) && !(mask & 0xE000) && blackCount <= 12) return LINE_CASE_CORNER_LEFT;
     if (blackCount == 0) return LINE_CASE_LOST_LINE;
     return LINE_CASE_NORMAL_PID;
 }
@@ -287,11 +287,10 @@ void pid_line_follow_step(void) {
     if (blackCount != 0)
         inGap = false;
 
-    // 2. TÍNH TOÁN LỰC XOAY COMPA CUA 90 ĐỘ (BÁNH NGOÀI 90, BÁNH TRONG 70)
-    // Bánh ngoài tiến (p_out = 90): xoay êm ái, bám sát vạch, không bị văng trớn
-    // Bánh trong lùi (p_in = 70): ghìm cứng làm tâm compa chuẩn xác
-    int p_out = constrain(TURN_OUT, 60, 130);
-    int p_in  = constrain(TURN_IN, 40, 110);
+    // 2. TÍNH TOÁN LỰC XOAY COMPA CUA 90 ĐỘ (BÁNH NGOÀI 115, BÁNH TRONG 75)
+    // Bánh ngoài quét mạnh mẽ dứt khoát, bánh trong lùi ghìm tâm compa chuẩn xác
+    int p_out = constrain(TURN_OUT, 60, 150);
+    int p_in  = constrain(TURN_IN, 40, 120);
 
     // 2A. NẾU ĐANG TRONG TRẠNG THÁI XOAY 90 ĐỘ (STATE MACHINE ACTIVE)
     if (s_corner_state == 2) { // Đang xoay Phải 90°
@@ -299,13 +298,13 @@ void pid_line_follow_step(void) {
         move(p_out, -p_in); // Bánh trái tiến, bánh phải lùi ghìm tâm
 
         unsigned long elapsed = millis() - s_corner_start_ms;
-        // Kiểm tra xem vạch cũ đã rời khỏi cụm mắt giữa chưa
-        if ((currentPattern & 0x03C0) == 0) {
+        // Kiểm tra xem toàn bộ cụm mắt giữa (5..10) đã rời khỏi vạch cũ chưa
+        if ((currentPattern & 0x07E0) == 0) {
             s_corner_cleared_old = true;
         }
 
-        // Thoát cua khi: Vạch cũ đã rời đi VÀ mắt giữa bắt được vạch mới (hoặc sau 40ms nếu xoay nhanh)
-        if ((s_corner_cleared_old || elapsed >= 40) && ((currentPattern & 0x03C0) != 0)) {
+        // Thoát cua khi: Đã rời vạch cũ VÀ cụm mắt giữa (5..10) bắt được vạch mới (sau ít nhất 35ms)
+        if ((s_corner_cleared_old || elapsed >= 60) && ((currentPattern & 0x07E0) != 0) && (elapsed >= 35)) {
             s_corner_state = 0;
             s_corner_cleared_old = false;
             s_last_corner_end_ms = millis();
@@ -331,11 +330,11 @@ void pid_line_follow_step(void) {
         move(-p_in, p_out); // Bánh trái lùi ghìm tâm, bánh phải tiến
 
         unsigned long elapsed = millis() - s_corner_start_ms;
-        if ((currentPattern & 0x03C0) == 0) {
+        if ((currentPattern & 0x07E0) == 0) {
             s_corner_cleared_old = true;
         }
 
-        if ((s_corner_cleared_old || elapsed >= 40) && ((currentPattern & 0x03C0) != 0)) {
+        if ((s_corner_cleared_old || elapsed >= 60) && ((currentPattern & 0x07E0) != 0) && (elapsed >= 35)) {
             s_corner_state = 0;
             s_corner_cleared_old = false;
             s_last_corner_end_ms = millis();
@@ -355,18 +354,9 @@ void pid_line_follow_step(void) {
         return;
     }
 
-    // 2B. NHẬN DIỆN BẮT ĐẦU VÀO GÓC VUÔNG 90 ĐỘ / NGÃ 3 NHÁNH RẼ
-    // Để KHÔNG BỊ KÍCH HOẠT NHẦM trên đường ziczac / đường cong uốn lượn:
-    // - Trên đường ziczac: Vạch đen chỉ trượt dần từ giữa sang mép (blackCount thường <= 3).
-    //   Trường hợp này 100% để bộ PID mượt mà xử lý, TUYỆT ĐỐI KHÔNG kích hoạt State Machine Cua.
-    // - Chỉ kích hoạt State Machine Cua vuông 90° khi:
-    //   + Có lệnh ép rẽ từ sa bàn (s_sector_action == 1 hoặc 2)
-    //   + HOẶC có góc vuông / ngã rẽ thật sự: Mắt giữa vẫn có vạch ((currentPattern & 0x07E0) != 0)
-    //     ĐỒNG THỜI cánh ngoài xuất hiện nhánh rẽ và tổng số mắt đen blackCount >= 4.
-    //   + HOẶC góc vuông chữ L: Cụm 3 mắt ngoài cùng đều đen và blackCount >= 4.
+    // 2B. NHẬN DIỆN HỢP NHẤT CUA VUÔNG 90 ĐỘ (ÁP DỤNG ĐỒNG NHẤT CHO CẢ NGÃ 3 VÀ GÓC CHỮ L):
+    // Đếm số mắt đen ở 2 cánh xòe rộng:
     uint8_t right_branch_cnt = 0;
-    if (currentPattern & (1 << 10)) right_branch_cnt++;
-    if (currentPattern & (1 << 11)) right_branch_cnt++;
     if (currentPattern & (1 << 12)) right_branch_cnt++;
     if (currentPattern & (1 << 13)) right_branch_cnt++;
     if (currentPattern & (1 << 14)) right_branch_cnt++;
@@ -377,22 +367,21 @@ void pid_line_follow_step(void) {
     if (currentPattern & (1 << 1)) left_branch_cnt++;
     if (currentPattern & (1 << 2)) left_branch_cnt++;
     if (currentPattern & (1 << 3)) left_branch_cnt++;
-    if (currentPattern & (1 << 4)) left_branch_cnt++;
-    if (currentPattern & (1 << 5)) left_branch_cnt++;
 
-    bool center_has_line = (currentPattern & 0x07E0) != 0;
     bool corner_cooldown_ok = (millis() - s_last_corner_end_ms > 70) || (s_sector_action == 1) || (s_sector_action == 2);
-    bool recently_centered = center_has_line || ((millis() - s_last_center_ms) < 70);
 
-    // Cua phải 90° / Ngã 3 rẽ phải:
+    // CUA PHẢI 90° (Hợp nhất cả Ngã 3 rẽ phải và Cua vuông chữ L phải):
+    // 1. Cánh phải có nhánh vạch đâm ngang: ít nhất 2 mắt trong cụm 12..15 chạm đen và chạm mắt rìa 13..15
+    // 2. Tổng số mắt đen >= 3 (loại trừ vạch đơn ziczac 1-2 mắt)
+    // 3. Cánh trái TRẮNG HOÀN TOÀN (mắt 0..2 trắng -> loại trừ 100% ngã tư và vạch Diode)
+    // 4. Không bị cấm bởi lệnh ép sa bàn (s_sector_action != 1)
     bool is_explicit_turn_right = (s_sector_action == 2) && ((currentPattern & 0xFC00) != 0);
-    bool is_t_junction_right   = center_has_line && ((currentPattern & 0xE000) != 0) && (blackCount >= 4);
-    bool is_l_corner_right     = (right_branch_cnt >= 3) && ((currentPattern & 0xE000) == 0xE000) && (blackCount >= 4);
-    bool right_branch_detected = is_explicit_turn_right || is_t_junction_right || is_l_corner_right;
+    bool right_branch_detected = is_explicit_turn_right || 
+                                 ((right_branch_cnt >= 2) && (blackCount >= 3) && ((currentPattern & 0xF000) != 0));
     bool left_wing_clear = !(currentPattern & 0x0007);
 
-    if (s_sector_action != 1 && corner_cooldown_ok && right_branch_detected && left_wing_clear && blackCount <= 12 && recently_centered) {
-        s_corner_state = 2; // Khóa trạng thái cua Phải
+    if (s_sector_action != 1 && corner_cooldown_ok && right_branch_detected && left_wing_clear && blackCount <= 12) {
+        s_corner_state = 2; // Khóa trạng thái xoay Phải
         s_corner_start_ms = millis();
         s_corner_cleared_old = false;
         currentCase = LINE_CASE_CORNER_RIGHT;
@@ -400,15 +389,14 @@ void pid_line_follow_step(void) {
         return;
     }
 
-    // Cua trái 90° / Ngã 3 rẽ trái:
+    // CUA TRÁI 90° (Hợp nhất cả Ngã 3 rẽ trái và Cua vuông chữ L trái):
     bool is_explicit_turn_left = (s_sector_action == 1) && ((currentPattern & 0x003F) != 0);
-    bool is_t_junction_left   = center_has_line && ((currentPattern & 0x0007) != 0) && (blackCount >= 4);
-    bool is_l_corner_left     = (left_branch_cnt >= 3) && ((currentPattern & 0x0007) == 0x0007) && (blackCount >= 4);
-    bool left_branch_detected = is_explicit_turn_left || is_t_junction_left || is_l_corner_left;
+    bool left_branch_detected = is_explicit_turn_left || 
+                                ((left_branch_cnt >= 2) && (blackCount >= 3) && ((currentPattern & 0x000F) != 0));
     bool right_wing_clear = !(currentPattern & 0xE000);
 
-    if (s_sector_action != 2 && corner_cooldown_ok && left_branch_detected && right_wing_clear && blackCount <= 12 && recently_centered) {
-        s_corner_state = 1; // Khóa trạng thái cua Trái
+    if (s_sector_action != 2 && corner_cooldown_ok && left_branch_detected && right_wing_clear && blackCount <= 12) {
+        s_corner_state = 1; // Khóa trạng thái xoay Trái
         s_corner_start_ms = millis();
         s_corner_cleared_old = false;
         currentCase = LINE_CASE_CORNER_LEFT;
@@ -436,7 +424,7 @@ void pid_line_follow_step(void) {
         return;
     }
 
-    // 4. PID BÁM LINE ĐẦM CHẮC (DEADBAND LIÊN TỤC + D-TERM FILTER)
+    // 4. PID BÁM LINE ĐẦM CHẮC (DEADBAND LIÊN TỤC + D-TERM FILTER + DYNAMIC CORNER DECELERATION)
     currentCase = LINE_CASE_NORMAL_PID;
     int raw_error = lastLinePos - 7500; // SETPOINT = 7500
 
@@ -457,10 +445,22 @@ void pid_line_follow_step(void) {
     s_filtered_dError = s_filtered_dError * 0.6f + raw_dError * 0.4f;
     lastError = error;
 
+    // DYNAMIC CORNER DECELERATION (TỰ ĐỘNG HÃM GA KHI VÀO CUA GẮT Ở TỐC ĐỘ CAO):
+    // - Khi chạy đường thẳng và ziczac thông thường: giữ trọn ga 120 lướt băng băng.
+    // - Chỉ khi nào cua thật gắt (|raw_error| > 1800): mới tự động ghìm nhẹ ga (tối đa 25-30 PWM)
+    //   để triệt tiêu lực ly tâm, giúp xe bắt vạch bén ngót mà không bị khựng chùng ga!
+    int effective_base = base;
+    int abs_err = abs(raw_error);
+    if (base > 105 && abs_err > 1800) {
+        int decel = (abs_err - 1800) * 30 / 5000;
+        if (decel > 30) decel = 30;
+        effective_base = base - decel;
+    }
+
     int adjust = (int)(error * KP + s_filtered_dError * KD);
 
-    int L = base + adjust;
-    int R = base - adjust;
+    int L = effective_base + adjust;
+    int R = effective_base - adjust;
 
     // Giữ đà trớn mượt mà cho bánh trong (Smooth Minimum Throttle):
     // Thay vì để bánh trong tụt về 0 làm khựng xe mất đà,

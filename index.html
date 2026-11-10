@@ -988,11 +988,11 @@
         <div class="form-grid">
             <div class="field-box">
                 <label>Kp (Tỉ Lệ)</label>
-                <input type="number" step="0.005" id="cfgKp" value="0.04">
+                <input type="number" step="0.005" id="cfgKp" value="0.060">
             </div>
             <div class="field-box">
                 <label>Kd (Vi Phân)</label>
-                <input type="number" step="0.05" id="cfgKd" value="0.30">
+                <input type="number" step="0.05" id="cfgKd" value="1.00">
             </div>
             <div class="field-box">
                 <label>Ki (Tích Phân)</label>
@@ -1000,16 +1000,21 @@
             </div>
             <div class="field-box">
                 <label>Tốc Độ Nền (Base)</label>
-                <input type="number" step="5" id="cfgSpeed" value="100">
+                <input type="number" step="5" id="cfgSpeed" value="120">
             </div>
             <div class="field-box">
                 <label>Cua 90° Ngoài (+)</label>
-                <input type="number" step="5" id="cfgTurnOut" value="80" title="Bánh ngoài cua 90°">
+                <input type="number" step="5" id="cfgTurnOut" value="115" title="Bánh ngoài cua 90°">
             </div>
             <div class="field-box">
                 <label>Cua 90° Trong (-)</label>
-                <input type="number" step="5" id="cfgTurnIn" value="120" title="Bánh trong cua 90°">
+                <input type="number" step="5" id="cfgTurnIn" value="75" title="Bánh trong cua 90°">
             </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+            <button class="side-btn" style="border-color: var(--cyan); color: var(--cyan); padding: 8px; font-size: 0.75rem;" onclick="fetchFromCar()">🔄 KÉO THÔNG SỐ TỪ XE</button>
+            <button class="side-btn" style="border-color: var(--neon-yellow); color: var(--neon-yellow); padding: 8px; font-size: 0.75rem;" onclick="applyGoldenDefaults()">⚡ NẠP MẶC ĐỊNH 120</button>
         </div>
 
         <button id="btnSendPID" class="btn-full btn-burn-pid" onclick="sendPID()">
@@ -1138,12 +1143,12 @@
         }
 
         const defaultSettings = () => ({
-            kp: 0.04,
+            kp: 0.060,
             ki: 0.0,
-            kd: 0.30,
-            speed: 100,
-            turnOut: 90,
-            turnIn: 70
+            kd: 1.00,
+            speed: 120,
+            turnOut: 115,
+            turnIn: 75
         });
 
         // Cấu hình 3 Map x 2 Đầu (Trái/Phải)
@@ -1157,15 +1162,31 @@
             if (savedCfg) profileConfigs = JSON.parse(savedCfg);
         } catch(e) {}
 
+        // 7 Mốc sa bàn chuẩn Car Challenge 2026
+        const defaultWaypoints = () => [
+            { ticks: 450,  speed: 85,  action: 1 }, // ACTION_FORCE_LEFT: Qua Diode ép trái
+            { ticks: 1800, speed: 120, action: 0 }, // Đường thẳng số 1 bung ga 120
+            { ticks: 2600, speed: 100, action: 0 }, // Góc cua Khu 1
+            { ticks: 4800, speed: 110, action: 2 }, // ACTION_FORCE_RIGHT: Ép nhánh lượn sóng 3 múi
+            { ticks: 5500, speed: 120, action: 3 }, // ACTION_LOCK_STRAIGHT: Vượt vạch nét đứt
+            { ticks: 7000, speed: 100, action: 0 }, // Cua chữ U lượn mượt
+            { ticks: 7800, speed: 120, action: 0 }  // Phóng thẳng tiếp tục
+        ];
+
         // Mốc Sa Bàn riêng cho 3 Map x 2 Đầu (Trái/Phải)
         let userMaps = [
-            [[], []],
-            [[], []],
-            [[], []]
+            [[...defaultWaypoints()], [...defaultWaypoints()]],
+            [[...defaultWaypoints()], [...defaultWaypoints()]],
+            [[...defaultWaypoints()], [...defaultWaypoints()]]
         ];
         try {
             const savedMaps = localStorage.getItem('racecar_user_maps');
-            if (savedMaps) userMaps = JSON.parse(savedMaps);
+            if (savedMaps) {
+                const parsed = JSON.parse(savedMaps);
+                if (parsed && Array.isArray(parsed) && parsed[0] && Array.isArray(parsed[0][0]) && parsed[0][0].length > 0) {
+                    userMaps = parsed;
+                }
+            }
         } catch(e) {}
 
         // ĐỒNG HỒ BẤM GIỜ
@@ -1314,6 +1335,10 @@
                 document.getElementById('bleText').innerText = 'CONNECTED';
                 document.getElementById('bleIndicator').style.display = 'inline-block';
                 log('✅ Đã kết nối xe đua F1 thành công!');
+
+                // Tự động kéo PID và Map thực tế từ ESP32 lên giao diện Web
+                setTimeout(() => sendCmd('GETPID'), 350);
+                setTimeout(() => sendCmd(`CMD:GET_MAP:${activeMap}`), 700);
             } catch (e) {
                 log('❌ Lỗi BLE: ' + e);
             }
@@ -1366,6 +1391,54 @@
                     alert('🎉 [QUÉT XONG] Đã ghi nhận ' + lastLiveTicks + ' xung.');
                 } else if (raw === 'ACK:FINISH_STOPPED' || raw === 'ACK:STOPPED') {
                     stopTimer();
+                }
+            } else if (raw.startsWith('PID:')) {
+                // Định dạng từ xe: PID:0.045,0.400,150,TURN:90,70
+                log('📥 ' + raw);
+                try {
+                    const clean = raw.substring(4);
+                    const parts = clean.split(',');
+                    if (parts.length >= 3) {
+                        const kp = parseFloat(parts[0]);
+                        const kd = parseFloat(parts[1]);
+                        const spd = parseInt(parts[2]);
+                        let tOut = 90, tIn = 70;
+                        if (parts.length >= 5) {
+                            tOut = parseInt(parts[3].replace('TURN:', '')) || 90;
+                            tIn = parseInt(parts[4]) || 70;
+                        }
+                        document.getElementById('cfgKp').value = kp;
+                        document.getElementById('cfgKd').value = kd;
+                        document.getElementById('cfgSpeed').value = spd;
+                        document.getElementById('cfgTurnOut').value = tOut;
+                        document.getElementById('cfgTurnIn').value = tIn;
+
+                        profileConfigs[activeMap][activeSide] = {
+                            kp: kp, ki: 0.0, kd: kd, speed: spd, turnOut: tOut, turnIn: tIn
+                        };
+                        localStorage.setItem('racecar_profile_configs', JSON.stringify(profileConfigs));
+                        log(`✅ Đã đồng bộ PID từ xe: Speed=${spd}, Kp=${kp}, Kd=${kd}, Cua=${tOut}/${tIn}`);
+                    }
+                } catch(e) { console.error(e); }
+            } else if (raw.startsWith('MAP_INFO:')) {
+                // MAP_INFO:map_idx,count,is_right
+                const parts = raw.substring(9).split(',');
+                const m = parseInt(parts[0]);
+                log(`📥 Nhận cấu hình Map ${m + 1} từ xe: ${parts[1]} mốc`);
+                userMaps[m][activeSide] = [];
+            } else if (raw.startsWith('WP:')) {
+                // WP:map_idx,wp_idx,end_ticks,target_speed,action
+                const parts = raw.substring(3).split(',');
+                if (parts.length >= 5) {
+                    const m = parseInt(parts[0]);
+                    const idx = parseInt(parts[1]);
+                    const ticks = parseInt(parts[2]);
+                    const spd = parseInt(parts[3]);
+                    const act = parseInt(parts[4]);
+                    if (!userMaps[m][activeSide]) userMaps[m][activeSide] = [];
+                    userMaps[m][activeSide][idx] = { ticks: ticks, speed: spd, action: act };
+                    localStorage.setItem('racecar_user_maps', JSON.stringify(userMaps));
+                    renderWpTable();
                 }
             } else {
                 log('📥 ' + raw);
@@ -1548,6 +1621,37 @@
                     btn.innerText = '⚡ NẠP PID CHO ĐẦU NÀY';
                 }, 1400);
             }
+        }
+
+        function fetchFromCar() {
+            vibrate(25);
+            log('🔄 Đang kéo thông số và bản đồ từ xe...');
+            sendCmd('GETPID');
+            setTimeout(() => sendCmd(`CMD:GET_MAP:${activeMap}`), 300);
+        }
+
+        function applyGoldenDefaults() {
+            vibrate(35);
+            try {
+                localStorage.removeItem('racecar_profile_configs');
+                localStorage.removeItem('racecar_user_maps');
+            } catch(e) {}
+
+            profileConfigs = [
+                [defaultSettings(), defaultSettings()],
+                [defaultSettings(), defaultSettings()],
+                [defaultSettings(), defaultSettings()]
+            ];
+            userMaps = [
+                [[...defaultWaypoints()], [...defaultWaypoints()]],
+                [[...defaultWaypoints()], [...defaultWaypoints()]],
+                [[...defaultWaypoints()], [...defaultWaypoints()]]
+            ];
+
+            applyActiveProfile();
+            renderWpTable();
+            log('⚡ ĐÃ KHÔI PHỤC BỘ THÔNG SỐ CHUẨN: Speed 120, Kp 0.060, Kd 1.00, Cua 115/75 & 7 Mốc sa bàn!');
+            alert('✅ ĐÃ NẠP BỘ THÔNG SỐ MẶC ĐỊNH CHUẨN 120!\n- Tốc độ nền: 120 PWM\n- Kp: 0.060 (Bắt line bén)\n- Kd: 1.00 (Giảm chấn dập rung lắc cực mạnh)\n- Cua 90° Ngoài/Trong: 115 / 75\n- Đã nạp 7 Mốc sa bàn chuẩn Car Challenge 2026.');
         }
 
         // ================= MAP & ĐẦU XUẤT PHÁT =================

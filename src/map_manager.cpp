@@ -164,8 +164,10 @@ void map_get_current_action(uint32_t current_ticks, int16_t *out_speed, uint8_t 
         }
     }
 
-    // Nếu đã chạy vượt qua mốc cuối cùng -> Phanh dừng
-    *out_speed = 0;
-    *out_action = ACTION_BRAKE_STOP;
+    // Nếu đã chạy vượt qua mốc cuối cùng -> Tiếp tục duy trì tốc độ và chạy bám line (bỏ cơ chế tự dừng)
+    int16_t last_spd = prof->wps[prof->count - 1].target_speed;
+    if (last_spd <= 0) last_spd = 120;
+    *out_speed = last_spd;
+    *out_action = ACTION_NORMAL;
     *out_wp_idx = prof->count - 1;
 }

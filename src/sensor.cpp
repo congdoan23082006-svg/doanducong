@@ -13,7 +13,7 @@ uint16_t thresholds[N_SENSORS] = {0};
 bool blackIsHigher[N_SENSORS] = {false};
 
 bool isCalibrating = false;
-bool calibrationReady = false;
+bool calibrationReady = true; // Mặc định sẵn sàng để xe có thể chạy ngay khi bật nguồn
 
 static uint32_t s_calib_start_time = 0;
 static uint32_t s_calib_duration_ms = 4000;
@@ -41,6 +41,7 @@ void sensor_init(void) {
         thresholds[i] = 2048;
         blackIsHigher[i] = true;
     }
+    calibrationReady = true;
 }
 
 void sensor_mux_select(uint8_t channel) {

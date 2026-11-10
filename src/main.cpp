@@ -125,7 +125,7 @@ void controlTask(void *pvParameters) {
             float dist_avg_mm = encoder_get_dist_avg_mm();
             uint8_t total_black = sensor_get_black_count();
 
-            int16_t tgt_spd = 100;
+            int16_t tgt_spd = 120;
             uint8_t act = 0;
             uint8_t wp_idx = 0;
 
@@ -221,8 +221,8 @@ void setup() {
     encoder_init();
     map_manager_init();
 
-    // 3. Khởi tạo bộ điều khiển PID chuẩn theo code mẫu (Kp=0.04, Ki=0.0, Kd=0.35, baseSpeed=100)
-    pid_init(0.04f, 0.0f, 0.35f, 100);
+    // 3. Khởi tạo bộ điều khiển PID tốc độ chuẩn 120 bắt line bén (Kp=0.060, Ki=0.0, Kd=1.000, baseSpeed=120)
+    pid_init(0.060f, 0.0f, 1.000f, 120);
 
     // 4. Khởi tạo BLE Server với tên nhận diện
     ble_init("RACECAR_16SEN");
@@ -280,6 +280,7 @@ void loop() {
                 // Đã calib -> Bật / Tắt chạy đua
                 CarRunMode_t cur = car_get_run_mode();
                 if (cur == CAR_MODE_STOP || cur == CAR_MODE_ALIGN) {
+                    encoder_reset();
                     car_set_run_mode(CAR_MODE_RACE);
                     Serial.println(">> [NÚT 35] BUNG TỐC ĐỘ ĐUA: BẬT <<");
                 } else {
