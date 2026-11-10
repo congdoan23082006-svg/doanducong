@@ -276,25 +276,14 @@ void pid_line_follow_step(void) {
         s_last_center_ms = millis();
     }
 
-    // 1. Vạch kết thúc / ngã tư lớn
-    // Chỉ kích hoạt khi CẢ 2 CÁNH ĐỀU ĐEN (vạch ngang trọn vẹn) hoặc gần như toàn bộ dàn mắt đen (>= 13 mắt)
+    // 1. Vạch cắt ngang (Ngã tư lớn / Vạch Cathode Diode / Crossline):
+    // ĐÃ BỎ TRƯỜNG HỢP TỰ DỪNG XE TẠI ĐÂY! Việc dừng xe hoàn toàn do mốc Odometry Encoder trong main.cpp quyết định.
+    // Khi gặp vạch cắt ngang, xe giữ tốc độ cơ sở phóng thẳng vượt qua mượt mà, không bị khựng chết máy.
     bool wings_both_black = ((currentPattern & 0x000F) != 0) && ((currentPattern & 0xF000) != 0);
     if ((wings_both_black && blackCount >= 6) || blackCount >= 13 || currentPattern == 0xFFFF) {
-        if (fullBlackFrames < END_CONFIRM)
-            fullBlackFrames++;
-        if (fullBlackFrames >= END_CONFIRM && !inFullBlack) {
-            inFullBlack = true;
-            cntDen++;
-            if (cntDen >= END_BLACK_COUNT) {
-                currentCase = LINE_CASE_CROSS_LINE;
-                s_corner_state = 0;
-                motor_stop();
-                return;
-            }
-        }
-    } else {
-        fullBlackFrames = 0;
-        inFullBlack = false;
+        currentCase = LINE_CASE_CROSS_LINE;
+        move(base, base);
+        return;
     }
 
     if (blackCount != 0)
@@ -455,9 +444,9 @@ void pid_line_follow_step(void) {
         error = 0;
     }
 
-    // Bộ lọc thông thấp cho thành phần vi phân D (70% cũ, 30% mới) để dập tắt nhiễu ADC 1000Hz
+    // Bộ lọc thông thấp cho thành phần vi phân D (60% cũ, 40% mới) để dập tắt nhiễu ADC 1000Hz
     float raw_dError = (float)(error - lastError);
-    s_filtered_dError = s_filtered_dError * 0.7f + raw_dError * 0.3f;
+    s_filtered_dError = s_filtered_dError * 0.6f + raw_dError * 0.4f;
     lastError = error;
 
     int adjust = (int)(error * KP + s_filtered_dError * KD);
@@ -465,18 +454,13 @@ void pid_line_follow_step(void) {
     int L = base + adjust;
     int R = base - adjust;
 
-    // Thuật toán Bù lực đẩy bánh ngoài khi vào cung uốn lượn (High-Speed Curve Hugging)
-    // Khi sai số |error| > 1000 (đang vào cung uốn lượn), tự động bơm thêm lực đẩy bánh ngoài lên tới +25 PWM
-    // Giúp xe lướt tốc độ cao qua các đoạn uốn cong ngọt ngào như xe đua F1 có lực ép khí động học
-    int abs_err = abs(error);
-    if (abs_err > 1000) {
-        int curve_boost = (int)(((long)(abs_err - 1000) * 25) / 6500);
-        if (adjust > 0) {
-            L += curve_boost; // Cung uốn sang phải -> Bơm thêm lực bánh ngoài (Trái)
-        } else if (adjust < 0) {
-            R += curve_boost; // Cung uốn sang trái -> Bơm thêm lực bánh ngoài (Phải)
-        }
-    }
+    // Trong chế độ PID bám line thường: Bánh trong chỉ giảm tốc, KHÔNG đảo chiều quay lùi
+    // Giúp xe lướt êm ái, bám đường đầm chắc, triệt tiêu 100% hiện tượng rung giật / quẫy đuôi cá
+    // (Đảo chiều lùi chỉ dành riêng cho trường hợp Cua vuông 90° State Machine: -p_in)
+    if (L < 0) L = 0;
+    if (R < 0) R = 0;
+    if (L > 220) L = 220;
+    if (R > 220) R = 220;
 
     move(L, R);
 }
