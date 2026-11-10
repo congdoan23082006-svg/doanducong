@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Đo đạc Odometry phần cứng PCNT x4, Đồng pha Kênh A/B, INPUT_PULLUP
+// ================================================================
 #include "encoder.h"
 #include "config.h"
 #include <Arduino.h>

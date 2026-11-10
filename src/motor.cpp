@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Điều khiển động cơ GA25-370, PWM 20kHz, Active Short Brake
+// ================================================================
 #include "motor.h"
 #include "config.h"
 #include <Arduino.h>

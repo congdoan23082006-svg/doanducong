@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Dual-Core 1000Hz, Sensor 4kHz, PID 100 PWM, Diode Safe Crossing
+// ================================================================
 #include <Arduino.h>
 #include "config.h"
 #include "sensor.h"

@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Quét 16 mắt 4000Hz, MUX 8µs, Lọc IIR 92/8 siêu tốc
+// ================================================================
 #include "sensor.h"
 #include "config.h"
 #include <Arduino.h>

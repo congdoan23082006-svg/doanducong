@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Bộ điều khiển PID 100 PWM, Continuous Deadband, State Machine 90°
+// ================================================================
 #include "pid_controller.h"
 #include "sensor.h"
 #include "motor.h"

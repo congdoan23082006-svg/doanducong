@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Quản lý 7 mốc sa bàn chuẩn Goertek 2026, Lưu Flash NVS vĩnh viễn
+// ================================================================
 #include "map_manager.h"
 #include <Arduino.h>
 #include <Preferences.h>

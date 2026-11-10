@@ -1,3 +1,7 @@
+// ================================================================
+// XE DÒ LINE 16 MẮT 2026 - PHIÊN BẢN HOÀN HẢO (CAR CHALLENGE 2026)
+// Giao tiếp Bluetooth Low Energy (NUS), Telemetry 150ms chuẩn mượt
+// ================================================================
 #include "ble_handler.h"
 #include "map_manager.h"
 #include "sensor.h"
